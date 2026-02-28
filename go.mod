@@ -1,6 +1,6 @@
 module github.com/roasbeef/claude-agent-sdk-go
 
-go 1.24.0
+go 1.23.0
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.2.0
