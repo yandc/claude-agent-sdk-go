@@ -14,6 +14,16 @@ type ModelInfo struct {
 	Description string `json:"description"` // Model capabilities description
 }
 
+// InitializationInfo contains metadata returned by the CLI initialize response.
+type InitializationInfo struct {
+	Commands              []SlashCommand `json:"commands,omitempty"`
+	Models                []ModelInfo    `json:"models,omitempty"`
+	Account               *AccountInfo   `json:"account,omitempty"`
+	AvailableOutputStyles []string       `json:"availableOutputStyles,omitempty"`
+	OutputStyle           string         `json:"outputStyle,omitempty"`
+	PID                   *int           `json:"pid,omitempty"`
+}
+
 // McpServerStatus reports the connection status of an MCP server.
 type McpServerStatus struct {
 	Name       string         `json:"name"`       // Server name

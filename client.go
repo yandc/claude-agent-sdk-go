@@ -21,6 +21,7 @@ type Client struct {
 	skills    []Skill
 	mu        sync.Mutex
 	connected bool
+	initInfo  InitializationInfo
 
 	// Message routing.
 	msgCh     chan Message
@@ -127,9 +128,24 @@ func (c *Client) Connect(ctx context.Context) error {
 		transport.Close()
 		return fmt.Errorf("failed to initialize: %w", err)
 	}
+	c.initInfo = parseInitializationInfo(c.protocol.InitializationResponse())
 
 	c.connected = true
 	return nil
+}
+
+// InitializationInfo returns metadata captured from the initialize response.
+func (c *Client) InitializationInfo() InitializationInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return cloneInitializationInfo(c.initInfo)
+}
+
+// SupportedModelsFromInit returns the models advertised during initialization.
+func (c *Client) SupportedModelsFromInit() []ModelInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]ModelInfo(nil), c.initInfo.Models...)
 }
 
 // messagePump reads from transport and routes messages.
@@ -537,6 +553,7 @@ func (c *Client) Close() error {
 	}
 
 	c.connected = false
+	c.initInfo = InitializationInfo{}
 
 	// Cancel message pump.
 	if c.msgCancel != nil {
@@ -548,6 +565,134 @@ func (c *Client) Close() error {
 	}
 
 	return nil
+}
+
+func parseInitializationInfo(resp *SDKControlResponse) InitializationInfo {
+	if resp == nil || resp.Response.Response == nil {
+		return InitializationInfo{}
+	}
+	result := resp.Response.Response
+	info := InitializationInfo{
+		Commands:              parseSlashCommands(result["commands"]),
+		Models:                parseModelInfos(result["models"]),
+		Account:               parseAccountInfo(result["account"]),
+		AvailableOutputStyles: parseStringList(result["available_output_styles"]),
+		OutputStyle:           getMapString(result, "output_style"),
+	}
+	if pid, ok := getMapInt(result, "pid"); ok {
+		info.PID = &pid
+	}
+	return info
+}
+
+func cloneInitializationInfo(info InitializationInfo) InitializationInfo {
+	cloned := InitializationInfo{
+		Commands:              append([]SlashCommand(nil), info.Commands...),
+		Models:                append([]ModelInfo(nil), info.Models...),
+		AvailableOutputStyles: append([]string(nil), info.AvailableOutputStyles...),
+		OutputStyle:           info.OutputStyle,
+	}
+	if info.Account != nil {
+		account := *info.Account
+		cloned.Account = &account
+	}
+	if info.PID != nil {
+		pid := *info.PID
+		cloned.PID = &pid
+	}
+	return cloned
+}
+
+func parseSlashCommands(raw any) []SlashCommand {
+	items, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]SlashCommand, 0, len(items))
+	for _, item := range items {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		result = append(result, SlashCommand{
+			Name:         getString(itemMap, "name"),
+			Description:  getString(itemMap, "description"),
+			ArgumentHint: getString(itemMap, "argumentHint"),
+		})
+	}
+	return result
+}
+
+func parseModelInfos(raw any) []ModelInfo {
+	items, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]ModelInfo, 0, len(items))
+	for _, item := range items {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		result = append(result, ModelInfo{
+			Value:       getString(itemMap, "value"),
+			DisplayName: getString(itemMap, "displayName"),
+			Description: getString(itemMap, "description"),
+		})
+	}
+	return result
+}
+
+func parseAccountInfo(raw any) *AccountInfo {
+	itemMap, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	account := &AccountInfo{
+		Email:            getString(itemMap, "email"),
+		Organization:     getString(itemMap, "organization"),
+		SubscriptionType: getString(itemMap, "subscriptionType"),
+		TokenSource:      getString(itemMap, "tokenSource"),
+		APIKeySource:     getString(itemMap, "apiKeySource"),
+	}
+	return account
+}
+
+func parseStringList(raw any) []string {
+	items, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if value, ok := item.(string); ok && value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func getMapString(m map[string]interface{}, key string) string {
+	value, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func getMapInt(m map[string]interface{}, key string) (int, bool) {
+	value, ok := m[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
 }
 
 // ListSkills returns all loaded Skills (user + project).
