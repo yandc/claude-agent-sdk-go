@@ -25,6 +25,8 @@ type Protocol struct {
 	sdkMcpServers map[string]*McpServer   // serverName -> server (in-process MCP)
 	initResponse  atomic.Pointer[SDKControlInitializeResponse]
 	initialized   atomic.Bool
+	initRespMu    sync.RWMutex
+	initResp      *SDKControlResponse
 }
 
 // NewProtocol creates a new protocol handler.
@@ -155,12 +157,26 @@ func (p *Protocol) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to parse initialization response: %w", err)
 	}
 	p.initResponse.Store(&initResp)
+	p.initRespMu.Lock()
+	respCopy := resp
+	p.initResp = &respCopy
+	p.initRespMu.Unlock()
 	p.initialized.Store(true)
 	return nil
 }
 
 func (p *Protocol) initResult() *SDKControlInitializeResponse {
 	return p.initResponse.Load()
+}
+
+func (p *Protocol) InitializationResponse() *SDKControlResponse {
+	p.initRespMu.RLock()
+	defer p.initRespMu.RUnlock()
+	if p.initResp == nil {
+		return nil
+	}
+	respCopy := *p.initResp
+	return &respCopy
 }
 
 // SendMessage sends a user message to the CLI.
@@ -1444,6 +1460,7 @@ func (p *Protocol) sendRequest(ctx context.Context, subtype string, payload map[
 					Message: err.Error(),
 				},
 			}
+			return
 		}
 	}()
 
