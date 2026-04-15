@@ -156,6 +156,10 @@ func (t *SubprocessTransport) Connect(ctx context.Context) error {
 		args = append(args, "--agent", t.options.MainAgent)
 	}
 
+	if t.options.Effort != "" {
+		args = append(args, "--effort", string(t.options.Effort))
+	}
+
 	if t.options.SystemPrompt != "" {
 		args = append(args, "--system-prompt", t.options.SystemPrompt)
 	}

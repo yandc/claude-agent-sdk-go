@@ -1906,6 +1906,15 @@ func TestSubprocessTransportAdditionalDirectoriesEmpty(t *testing.T) {
 	}
 }
 
+func TestNewClientRejectsInvalidEffort(t *testing.T) {
+	_, err := NewClient(WithEffort(EffortLevel("invalid")))
+	require.Error(t, err)
+
+	var configErr *ErrInvalidConfiguration
+	require.ErrorAs(t, err, &configErr)
+	assert.Equal(t, "Effort", configErr.Field)
+}
+
 // TestSubprocessTransportLargeMessageExceeds64KB tests that messages larger
 // than the default bufio.MaxScanTokenSize (64KB) are handled correctly after
 // the scanner buffer increase.
