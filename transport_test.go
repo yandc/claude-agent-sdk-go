@@ -644,6 +644,34 @@ func TestSubprocessTransportConnectArguments(t *testing.T) {
 	assert.Contains(t, runner.StartArgs, "--verbose")
 }
 
+func TestSubprocessTransportEffortArgument(t *testing.T) {
+	runner := NewMockSubprocessRunner()
+
+	opts := &Options{
+		Model:  "claude-sonnet-4-5-20250929",
+		Effort: EffortHigh,
+	}
+
+	transport := NewSubprocessTransportWithRunner(runner, opts)
+
+	ctx := context.Background()
+	err := transport.Connect(ctx)
+	require.NoError(t, err)
+	defer transport.Close()
+
+	assert.True(t, runner.started)
+	assert.Contains(t, runner.StartArgs, "--effort")
+
+	found := false
+	for i, arg := range runner.StartArgs {
+		if arg == "--effort" && i+1 < len(runner.StartArgs) && runner.StartArgs[i+1] == string(EffortHigh) {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected --effort %s in args: %v", EffortHigh, runner.StartArgs)
+}
+
 // TestSubprocessTransportWorkingDirectory tests that Cwd option is passed to runner.
 func TestSubprocessTransportWorkingDirectory(t *testing.T) {
 	runner := NewMockSubprocessRunner()
@@ -794,6 +822,15 @@ func TestSubprocessTransportAdditionalDirectoriesEmpty(t *testing.T) {
 	for _, arg := range runner.StartArgs {
 		assert.NotEqual(t, "--add-dir", arg, "unexpected --add-dir in args: %v", runner.StartArgs)
 	}
+}
+
+func TestNewClientRejectsInvalidEffort(t *testing.T) {
+	_, err := NewClient(WithEffort(Effort("max")))
+	require.Error(t, err)
+
+	var configErr *ErrInvalidConfiguration
+	require.ErrorAs(t, err, &configErr)
+	assert.Equal(t, "Effort", configErr.Field)
 }
 
 // TestSubprocessTransportLargeMessageExceeds64KB tests that messages larger

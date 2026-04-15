@@ -1130,6 +1130,19 @@ func validateOptions(opts *Options) error {
 		}
 	}
 
+	// Validate effort
+	validEfforts := map[Effort]bool{
+		EffortLow:    true,
+		EffortMedium: true,
+		EffortHigh:   true,
+	}
+	if opts.Effort != "" && !validEfforts[opts.Effort] {
+		return &ErrInvalidConfiguration{
+			Field:  "Effort",
+			Reason: fmt.Sprintf("invalid effort: %s", opts.Effort),
+		}
+	}
+
 	// Validate session options
 	if opts.SessionOptions.Resume != "" && opts.SessionOptions.ForkFrom != "" {
 		return &ErrInvalidConfiguration{

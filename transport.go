@@ -117,6 +117,10 @@ func (t *SubprocessTransport) Connect(ctx context.Context) error {
 		args = append(args, "--model", t.options.Model)
 	}
 
+	if t.options.Effort != "" {
+		args = append(args, "--effort", string(t.options.Effort))
+	}
+
 	if t.options.SystemPrompt != "" {
 		args = append(args, "--system-prompt", t.options.SystemPrompt)
 	}

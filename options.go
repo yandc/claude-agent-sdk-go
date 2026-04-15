@@ -99,6 +99,10 @@ type Options struct {
 	// MaxBudgetUsd is the maximum budget in USD for the query.
 	MaxBudgetUsd *float64
 
+	// Effort controls thinking depth for the session.
+	// Supported values depend on the installed Claude CLI.
+	Effort Effort
+
 	// MaxThinkingTokens is the maximum tokens for thinking process.
 	MaxThinkingTokens *int
 
@@ -277,6 +281,13 @@ func WithSystemPrompt(prompt string) Option {
 func WithModel(model string) Option {
 	return func(o *Options) {
 		o.Model = model
+	}
+}
+
+// WithEffort sets the thinking depth for the session.
+func WithEffort(effort Effort) Option {
+	return func(o *Options) {
+		o.Effort = effort
 	}
 }
 
@@ -475,6 +486,20 @@ const (
 
 	// PermissionModeBypassAll skips all permission checks.
 	PermissionModeBypassAll PermissionMode = "bypassPermissions"
+)
+
+// Effort controls how much reasoning effort Claude applies to the session.
+type Effort string
+
+const (
+	// EffortLow uses the lowest reasoning effort.
+	EffortLow Effort = "low"
+
+	// EffortMedium uses balanced reasoning effort.
+	EffortMedium Effort = "medium"
+
+	// EffortHigh uses the highest reasoning effort supported by this SDK.
+	EffortHigh Effort = "high"
 )
 
 // CanUseToolFunc is a callback invoked before tool execution.
