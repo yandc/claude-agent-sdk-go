@@ -883,7 +883,10 @@ func (p *Protocol) handleSDKPermissionRequest(ctx context.Context, req SDKContro
 	permReq := ToolPermissionRequest{
 		ToolName:  toolName,
 		Arguments: marshalJSON(arguments),
-		Context:   PermissionContext{},
+		Context: PermissionContext{
+			ToolUseID: req.Request.ToolUseID,
+			AgentID:   req.Request.AgentID,
+		},
 	}
 
 	// Check permission callback.
@@ -903,10 +906,15 @@ func (p *Protocol) handleSDKPermissionRequest(ctx context.Context, req SDKContro
 	}
 	var classification PermissionDecisionClassification
 	if result.IsAllow() {
-		// Pass the original tool input through unchanged.
-		responseData["updatedInput"] = arguments
 		if allow, ok := result.(PermissionAllow); ok {
 			classification = allow.Classification
+			if allow.UpdatedInput != nil {
+				responseData["updatedInput"] = allow.UpdatedInput
+			} else {
+				responseData["updatedInput"] = arguments
+			}
+		} else {
+			responseData["updatedInput"] = arguments
 		}
 	} else {
 		responseData["behavior"] = "deny"

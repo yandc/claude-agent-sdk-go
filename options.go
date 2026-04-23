@@ -1372,6 +1372,10 @@ type PermissionResult interface {
 type PermissionAllow struct {
 	// Classification optionally labels the decision for telemetry. Empty = unset.
 	Classification PermissionDecisionClassification
+
+	// UpdatedInput optionally replaces the tool input passed back to the CLI.
+	// When nil, the original input is passed through unchanged.
+	UpdatedInput map[string]interface{}
 }
 
 // IsAllow implements PermissionResult.
