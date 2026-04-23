@@ -528,7 +528,11 @@ type PermissionResult interface {
 }
 
 // PermissionAllow indicates permission granted.
-type PermissionAllow struct{}
+type PermissionAllow struct {
+	// UpdatedInput optionally replaces the tool input passed back to the CLI.
+	// When nil, the original input is passed through unchanged.
+	UpdatedInput map[string]interface{}
+}
 
 // IsAllow implements PermissionResult.
 func (PermissionAllow) IsAllow() bool { return true }
