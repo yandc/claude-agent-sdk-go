@@ -72,6 +72,7 @@ func (r *LocalSubprocessRunner) Start(
 	// Create command without context - context-based lifecycle causes issues
 	// with stdout pipes. Caller is responsible for killing on context cancel.
 	r.cmd = exec.Command(r.cliPath, args...)
+	configurePlatformSubprocessCommand(r.cmd)
 	r.cmd.Env = env
 
 	// Set working directory if specified. Empty string uses the parent
@@ -337,6 +338,7 @@ func DiscoverCLIPath(options *Options) (string, error) {
 // Minimum required version: 2.0.0
 func ValidateCLIVersion(cliPath string) error {
 	cmd := exec.Command(cliPath, "--version")
+	configurePlatformSubprocessCommand(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to check version: %w", err)
