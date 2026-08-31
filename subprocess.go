@@ -132,7 +132,15 @@ func (r *LocalSubprocessRunner) Kill() error {
 	if r.cmd == nil || r.cmd.Process == nil {
 		return nil
 	}
-	return r.cmd.Process.Kill()
+	return killPlatformSubprocess(r.cmd)
+}
+
+// ProcessID returns the subprocess PID, or 0 before it starts.
+func (r *LocalSubprocessRunner) ProcessID() int {
+	if r == nil || r.cmd == nil || r.cmd.Process == nil {
+		return 0
+	}
+	return r.cmd.Process.Pid
 }
 
 // IsAlive returns true if the subprocess is still running.

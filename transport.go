@@ -116,6 +116,19 @@ func (t *SubprocessTransport) SetStderrLogger(w io.Writer) {
 	t.errLogger.Store(&writerRef{w: w})
 }
 
+// ProcessID returns the CLI subprocess PID when the configured runner exposes
+// one. Custom and remote runners may return 0.
+func (t *SubprocessTransport) ProcessID() int {
+	if t == nil || t.runner == nil {
+		return 0
+	}
+	provider, ok := t.runner.(interface{ ProcessID() int })
+	if !ok {
+		return 0
+	}
+	return provider.ProcessID()
+}
+
 // Connect spawns the Claude CLI subprocess and establishes communication.
 //
 // The CLI is started with the following arguments:
@@ -549,6 +562,8 @@ func (t *SubprocessTransport) Close() error {
 		t.stdin.Close()
 	}
 
+	var closeErr error
+
 	// Wait for process to exit with timeout
 	if t.runner != nil {
 		done := make(chan error, 1)
@@ -562,7 +577,15 @@ func (t *SubprocessTransport) Close() error {
 			// Process exited gracefully
 		case <-time.After(5 * time.Second):
 			// Timeout - force kill
-			_ = t.runner.Kill()
+			if err := t.runner.Kill(); err != nil {
+				closeErr = err
+			} else {
+				select {
+				case <-done:
+				case <-time.After(5 * time.Second):
+					closeErr = fmt.Errorf("Claude CLI did not exit after kill")
+				}
+			}
 		}
 	}
 
@@ -574,7 +597,7 @@ func (t *SubprocessTransport) Close() error {
 		t.stderr.Close()
 	}
 
-	return nil
+	return closeErr
 }
 
 // IsAlive returns true if the subprocess is still running.

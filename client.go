@@ -576,6 +576,21 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// ProcessID returns the PID of the local Claude CLI subprocess, or 0 when the
+// configured transport does not expose a local process.
+func (c *Client) ProcessID() int {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	provider, ok := c.transport.(interface{ ProcessID() int })
+	if !ok {
+		return 0
+	}
+	return provider.ProcessID()
+}
+
 func parseInitializationInfo(resp *SDKControlResponse) InitializationInfo {
 	if resp == nil || resp.Response.Response == nil {
 		return InitializationInfo{}
