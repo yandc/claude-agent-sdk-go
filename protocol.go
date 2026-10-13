@@ -27,6 +27,9 @@ type Protocol struct {
 	initialized   atomic.Bool
 	initRespMu    sync.RWMutex
 	initResp      *SDKControlResponse
+	done          chan struct{}
+	endOnce       sync.Once
+	endErr        error // Published by closing done.
 }
 
 // NewProtocol creates a new protocol handler.
@@ -42,6 +45,7 @@ func NewProtocol(transport Transport, options *Options) *Protocol {
 		options:       options,
 		hookCallbacks: make(map[string]HookCallback),
 		sdkMcpServers: sdkMcpServers,
+		done:          make(chan struct{}),
 	}
 }
 
@@ -133,13 +137,18 @@ func (p *Protocol) Initialize(ctx context.Context) error {
 		},
 	}
 
+	// Register before writing so an immediate response cannot be lost.
+	ch := make(chan SDKControlResponse, 1)
+	p.pendingReqs.Store(requestID, ch)
+	defer p.pendingReqs.Delete(requestID)
+
 	// Send request.
 	if err := p.transport.Write(ctx, req); err != nil {
 		return fmt.Errorf("failed to send initialize request: %w", err)
 	}
 
 	// Wait for response.
-	resp, err := p.waitForSDKResponse(ctx, requestID)
+	resp, err := p.waitForSDKResponse(ctx, ch)
 	if err != nil {
 		return fmt.Errorf("initialization failed: %w", err)
 	}
@@ -1415,15 +1424,34 @@ func (p *Protocol) handleSDKControlResponse(resp SDKControlResponse) error {
 	return nil
 }
 
-// waitForSDKResponse waits for an SDK control response with the given request ID.
-func (p *Protocol) waitForSDKResponse(ctx context.Context, requestID string) (SDKControlResponse, error) {
-	ch := make(chan SDKControlResponse, 1)
-	p.pendingReqs.Store(requestID, ch)
+// terminate releases control waiters when their response source has ended.
+func (p *Protocol) terminate(err error) {
+	p.endOnce.Do(func() {
+		p.endErr = err
+		close(p.done)
+	})
+}
+
+// waitForSDKResponse waits for a registered response or transport termination.
+func (p *Protocol) waitForSDKResponse(ctx context.Context, ch <-chan SDKControlResponse) (SDKControlResponse, error) {
+	// Prefer an already delivered response even if the CLI exited immediately
+	// after writing it. Closing the transport must not discard buffered replies.
+	select {
+	case resp := <-ch:
+		return resp, nil
+	default:
+	}
 
 	select {
 	case <-ctx.Done():
-		p.pendingReqs.Delete(requestID)
 		return SDKControlResponse{}, ctx.Err()
+	case <-p.done:
+		select {
+		case resp := <-ch:
+			return resp, nil
+		default:
+			return SDKControlResponse{}, p.endErr
+		}
 	case resp := <-ch:
 		return resp, nil
 	}

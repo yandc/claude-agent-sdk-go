@@ -583,7 +583,7 @@ func (t *SubprocessTransport) Close() error {
 				select {
 				case <-done:
 				case <-time.After(5 * time.Second):
-					closeErr = fmt.Errorf("Claude CLI did not exit after kill")
+					closeErr = fmt.Errorf("claude CLI did not exit after kill")
 				}
 			}
 		}

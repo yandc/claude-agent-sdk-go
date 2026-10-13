@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"sync"
 	"time"
@@ -160,6 +161,16 @@ func (c *Client) SupportedModelsFromInit() []ModelInfo {
 // messagePump reads from transport and routes messages.
 func (c *Client) messagePump() {
 	defer close(c.msgCh)
+	defer func() {
+		// EOF ends the control response source as well as the message stream.
+		// Close also calls Wait, reaping a CLI that exited during initialization.
+		_ = c.transport.Close()
+		err := c.msgCtx.Err()
+		if err == nil {
+			err = fmt.Errorf("claude response stream ended: %w", io.EOF)
+		}
+		c.protocol.terminate(err)
+	}()
 	for msg, err := range c.transport.ReadMessages(c.msgCtx) {
 		if err != nil {
 			continue
@@ -563,6 +574,7 @@ func (c *Client) Close() error {
 
 	c.connected = false
 	c.initInfo = InitializationInfo{}
+	c.protocol.terminate(&ErrTransportClosed{})
 
 	// Cancel message pump.
 	if c.msgCancel != nil {
@@ -1254,22 +1266,20 @@ func (s *Stream) sendSDKControlRequest(
 	// Register before writing so a fast CLI response cannot race the waiter.
 	ch := make(chan SDKControlResponse, 1)
 	p.pendingReqs.Store(requestID, ch)
+	defer p.pendingReqs.Delete(requestID)
 
 	if err := s.client.transport.Write(ctx, req); err != nil {
-		p.pendingReqs.Delete(requestID)
 		return nil, fmt.Errorf("control request %q: write: %w", body.Subtype, err)
 	}
 
-	select {
-	case <-ctx.Done():
-		p.pendingReqs.Delete(requestID)
-		return nil, ctx.Err()
-	case resp := <-ch:
-		if resp.Response.Subtype == "error" {
-			return nil, fmt.Errorf("control request %q: %s", body.Subtype, resp.Response.Error)
-		}
-		return &resp, nil
+	resp, err := p.waitForSDKResponse(ctx, ch)
+	if err != nil {
+		return nil, err
 	}
+	if resp.Response.Subtype == "error" {
+		return nil, fmt.Errorf("control request %q: %s", body.Subtype, resp.Response.Error)
+	}
+	return &resp, nil
 }
 
 // InitializationResult returns the cached initialize response.
